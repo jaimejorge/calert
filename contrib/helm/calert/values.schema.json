@@ -76,6 +76,36 @@
                 "type": "string"
               }
             }
+          },
+          "reactions": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "enabled": {
+                "type": "boolean"
+              },
+              "firing": {
+                "type": "string"
+              },
+              "resolved": {
+                "type": "string"
+              },
+              "remove_previous": {
+                "type": "boolean"
+              },
+              "credentials_file": {
+                "type": "string"
+              },
+              "credentials_json": {
+                "type": "string"
+              },
+              "impersonate_user": {
+                "type": "string"
+              },
+              "ttl": {
+                "type": "string"
+              }
+            }
           }
         }
       }

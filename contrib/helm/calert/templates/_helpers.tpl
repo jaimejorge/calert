@@ -89,6 +89,33 @@ db = {{ .db }}
 key_prefix = {{ .key_prefix | quote }}
 {{- end }}
 {{- end }}
+{{- with $value.reactions }}
+[providers.{{ $key }}.reactions]
+{{- if hasKey . "enabled" }}
+enabled = {{ .enabled }}
+{{- end }}
+{{- if hasKey . "firing" }}
+firing = {{ .firing | quote }}
+{{- end }}
+{{- if hasKey . "resolved" }}
+resolved = {{ .resolved | quote }}
+{{- end }}
+{{- if hasKey . "remove_previous" }}
+remove_previous = {{ .remove_previous }}
+{{- end }}
+{{- if hasKey . "credentials_file" }}
+credentials_file = {{ .credentials_file | quote }}
+{{- end }}
+{{- if hasKey . "credentials_json" }}
+credentials_json = {{ .credentials_json | quote }}
+{{- end }}
+{{- if hasKey . "impersonate_user" }}
+impersonate_user = {{ .impersonate_user | quote }}
+{{- end }}
+{{- if hasKey . "ttl" }}
+ttl = {{ .ttl | quote }}
+{{- end }}
+{{- end }}
 {{- end }}
 {{- end -}}
 

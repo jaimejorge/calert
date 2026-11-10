@@ -22,6 +22,17 @@ max_alerts_per_message = 10 # Group mode only: max per-instance sections per car
 # password = ""
 # db = 0
 # key_prefix = "calert:"
+# Optional reactions on the original alert message: `firing` is added when an alert fires and replaced with `resolved` when it resolves.
+# Disabled by default. Incoming webhooks cannot manage reactions, so this needs Google Chat API credentials of a user. See docs/reactions.md.
+# Only supported with threading_mode = "alert". Uses the Redis settings above, when set, to share state between instances.
+# [providers.prod_alerts.reactions]
+# enabled = true
+# firing = "🔥" # Unicode emoji for a firing alert. Set to "" to skip.
+# resolved = "✅" # Unicode emoji for a resolved alert. Set to "" to skip.
+# remove_previous = true # Remove the firing reaction when the alert resolves.
+# credentials_file = "/etc/calert/chat-credentials.json" # `authorized_user` or `service_account` credentials. Alternatively set `credentials_json`.
+# impersonate_user = "alerts-bot@example.com" # Only for `service_account` credentials with domain-wide delegation.
+# ttl = "168h" # How long the original message of an alert is remembered.
 dry_run = false # In case you're simply experimenting with `calert` config changes and you don't wish to send _actual_ notifications, you can set `true`.
 retry_max = 3 # Maximum number of retries
 retry_wait_min = "1s" # Minimum time to wait before retrying

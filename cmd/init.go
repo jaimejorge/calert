@@ -99,6 +99,12 @@ func initProviders(ko *koanf.Koanf, lo *slog.Logger, metrics *metrics.Manager) (
 		"retry_max":              3,
 		"retry_wait_min":         "1s",
 		"retry_wait_max":         "5s",
+		// Reactions are opt-in; the remaining defaults only apply once enabled.
+		"reactions.enabled":         false,
+		"reactions.firing":          "🔥",
+		"reactions.resolved":        "✅",
+		"reactions.remove_previous": true,
+		"reactions.ttl":             "168h",
 	}
 
 	// Loop over all providers listed in config.
@@ -139,8 +145,18 @@ func initProviders(ko *koanf.Koanf, lo *slog.Logger, metrics *metrics.Manager) (
 				RedisPassword:   ko.String(fmt.Sprintf("%s.redis.password", cfgKey)),
 				RedisDB:         ko.Int(fmt.Sprintf("%s.redis.db", cfgKey)),
 				RedisKeyPrefix:  ko.String(fmt.Sprintf("%s.redis.key_prefix", cfgKey)),
+				Reactions: google_chat.ReactionOpts{
+					Enabled:         ko.Bool(fmt.Sprintf("%s.reactions.enabled", cfgKey)),
+					Firing:          ko.String(fmt.Sprintf("%s.reactions.firing", cfgKey)),
+					Resolved:        ko.String(fmt.Sprintf("%s.reactions.resolved", cfgKey)),
+					RemovePrevious:  ko.Bool(fmt.Sprintf("%s.reactions.remove_previous", cfgKey)),
+					CredentialsFile: ko.String(fmt.Sprintf("%s.reactions.credentials_file", cfgKey)),
+					CredentialsJSON: ko.String(fmt.Sprintf("%s.reactions.credentials_json", cfgKey)),
+					ImpersonateUser: ko.String(fmt.Sprintf("%s.reactions.impersonate_user", cfgKey)),
+					TTL:             ko.Duration(fmt.Sprintf("%s.reactions.ttl", cfgKey)),
+				},
 			}
-			lo.Debug("provider options", "type", provType, "room", name, "threading_mode", opts.ThreadingMode, "dry_run", opts.DryRun)
+			lo.Debug("provider options", "type", provType, "room", name, "threading_mode", opts.ThreadingMode, "dry_run", opts.DryRun, "reactions", opts.Reactions.Enabled)
 
 			gchat, err := google_chat.NewGoogleChat(opts)
 			if err != nil {

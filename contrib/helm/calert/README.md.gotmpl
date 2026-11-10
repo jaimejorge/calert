@@ -43,6 +43,21 @@ envFrom:
 
 Provider values support `threading_mode`, `dedup_window`, and `max_alerts_per_message`. For group threading across replicas, configure the optional nested `redis.address`, `redis.password`, `redis.db`, and `redis.key_prefix` values.
 
+Reactions on the original alert message are configured with the optional nested `reactions` values (`enabled`, `firing`, `resolved`, `remove_previous`, `credentials_file`, `credentials_json`, `impersonate_user`, `ttl`). The chart mounts only `config.toml`, so supply the Google credentials as an environment variable from a Secret through `envFrom`:
+
+```yaml
+providers:
+  prod_alerts:
+    endpoint: "https://chat.googleapis.com/v1/spaces/xxx/messages?key=key&token=token"
+    reactions:
+      enabled: true
+envFrom:
+  - secretRef:
+      name: calert-secrets # CALERT_PROVIDERS__PROD_ALERTS__REACTIONS__CREDENTIALS_JSON: '{"type":"authorized_user",...}'
+```
+
+See [docs/reactions.md](https://github.com/mr-karan/calert/blob/main/docs/reactions.md) for the Google Cloud setup.
+
 ## Alertmanager Integration
 
 The Alertmanager helm chart can be found [here](https://github.com/prometheus-community/helm-charts/tree/main/charts/alertmanager). You can refer to the following config block to route webhook alerts to `calert`:

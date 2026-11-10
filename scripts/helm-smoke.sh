@@ -161,7 +161,32 @@ providers:
       key_prefix: "calert:"
 EOF
 
+cat >"$tmp_dir/reactions.yaml" <<'EOF'
+providers:
+  prod_alerts:
+    endpoint: https://chat.example.test/webhook
+    threaded_replies: true
+    reactions:
+      enabled: true
+      firing: "🔥"
+      resolved: "✅"
+      remove_previous: false
+      credentials_file: /etc/calert/chat-credentials.json
+      impersonate_user: alerts-bot@example.com
+      ttl: 24h
+EOF
+
+cat >"$tmp_dir/invalid-reactions-unknown.yaml" <<'EOF'
+providers:
+  prod_alerts:
+    endpoint: https://chat.example.test/webhook
+    reactions:
+      enabled: true
+      unsupported: true
+EOF
+
 "$helm_bin" lint "$chart_dir"
+expect_lint_failure "$tmp_dir/invalid-reactions-unknown.yaml"
 expect_lint_failure "$tmp_dir/invalid-env-from-both.yaml"
 expect_lint_failure "$tmp_dir/invalid-env-from-empty.yaml"
 expect_lint_failure "$tmp_dir/invalid-env-from-unknown.yaml"
@@ -228,5 +253,19 @@ assert_contains "$tmp_dir/rendered-group-redis.yaml" "address = \"redis:6379\""
 assert_contains "$tmp_dir/rendered-group-redis.yaml" "password = \"redis-password\""
 assert_contains "$tmp_dir/rendered-group-redis.yaml" "db = 2"
 assert_contains "$tmp_dir/rendered-group-redis.yaml" "key_prefix = \"calert:\""
+
+render reactions "$tmp_dir/reactions.yaml"
+assert_contains "$tmp_dir/rendered-reactions.yaml" "[providers.prod_alerts.reactions]"
+assert_contains "$tmp_dir/rendered-reactions.yaml" "enabled = true"
+assert_contains "$tmp_dir/rendered-reactions.yaml" "firing = \"🔥\""
+assert_contains "$tmp_dir/rendered-reactions.yaml" "resolved = \"✅\""
+assert_contains "$tmp_dir/rendered-reactions.yaml" "remove_previous = false"
+assert_contains "$tmp_dir/rendered-reactions.yaml" "credentials_file = \"/etc/calert/chat-credentials.json\""
+assert_contains "$tmp_dir/rendered-reactions.yaml" "impersonate_user = \"alerts-bot@example.com\""
+assert_contains "$tmp_dir/rendered-reactions.yaml" "ttl = \"24h\""
+if grep -F -- ".reactions]" "$tmp_dir/rendered-group-redis.yaml" >/dev/null; then
+    printf 'did not expect a reactions table without reactions values\n' >&2
+    exit 1
+fi
 
 printf '%s\n' 'helm smoke matrix: passed'

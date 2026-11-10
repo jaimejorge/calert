@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"unicode/utf8"
@@ -82,14 +83,22 @@ func splitText(text string, limit int) []string {
 
 // sendMessage pushes out a notification to Google Chat space.
 func (m *GoogleChatManager) sendMessage(ctx context.Context, msg chatv1.Message, threadKey string, threaded bool) error {
+	_, err := m.postMessage(ctx, msg, threadKey, threaded)
+	return err
+}
+
+// postMessage pushes out a notification to Google Chat space. When reactions
+// are enabled it also returns the resource name of the created message, which
+// is empty if Google Chat did not report one.
+func (m *GoogleChatManager) postMessage(ctx context.Context, msg chatv1.Message, threadKey string, threaded bool) (string, error) {
 	out, err := json.Marshal(msg)
 	if err != nil {
-		return fmt.Errorf("encoding Google Chat message")
+		return "", fmt.Errorf("encoding Google Chat message")
 	}
 
 	u, err := url.Parse(m.endpoint)
 	if err != nil {
-		return fmt.Errorf("building Google Chat request")
+		return "", fmt.Errorf("building Google Chat request")
 	}
 	q := u.Query()
 	q.Set("messageReplyOption", "MESSAGE_REPLY_OPTION_UNSPECIFIED")
@@ -103,7 +112,7 @@ func (m *GoogleChatManager) sendMessage(ctx context.Context, msg chatv1.Message,
 	m.lo.Debug("sending alert", "threaded", threaded, "has_cards_v2", hasCard, "payload_bytes", len(out))
 	req, err := retryablehttp.NewRequestWithContext(ctx, http.MethodPost, u.String(), bytes.NewReader(out))
 	if err != nil {
-		return fmt.Errorf("building Google Chat request")
+		return "", fmt.Errorf("building Google Chat request")
 	}
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := m.client.Do(req)
@@ -111,12 +120,24 @@ func (m *GoogleChatManager) sendMessage(ctx context.Context, msg chatv1.Message,
 		if resp != nil && resp.Body != nil {
 			_ = resp.Body.Close()
 		}
-		return fmt.Errorf("sending Google Chat request")
+		return "", fmt.Errorf("sending Google Chat request")
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("google chat returned status %d", resp.StatusCode)
+		return "", fmt.Errorf("google chat returned status %d", resp.StatusCode)
 	}
-	return nil
+	if m.reactions == nil {
+		return "", nil
+	}
+
+	// The message is delivered at this point, so a response that cannot be
+	// read only costs the reaction and must not fail the notification.
+	var created struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, maxChatResponseSize)).Decode(&created); err != nil {
+		return "", nil
+	}
+	return created.Name, nil
 }

@@ -36,6 +36,8 @@ type GoogleChatManager struct {
 	dedupWindow     time.Duration
 	maxAlertsPerMsg int
 	groupStore      groupStateStore
+	// reactions is nil unless reactions are enabled for this room.
+	reactions *reactionManager
 }
 
 const (
@@ -72,6 +74,11 @@ type GoogleChatOpts struct {
 	RedisPassword  string
 	RedisDB        int
 	RedisKeyPrefix string
+
+	// Optional reactions on the original alert message. They need
+	// authenticated Google Chat API access on top of the webhook endpoint,
+	// and reuse the Redis options above to share state between replicas.
+	Reactions ReactionOpts
 }
 
 // NewGoogleChat initializes a Google Chat provider object.
@@ -237,6 +244,19 @@ func NewGoogleChat(opts GoogleChatOpts) (*GoogleChatManager, error) {
 		opts.Log.Warn("threaded_replies is ignored in group threading mode; threading is always on", "room", mgr.room)
 		mgr.threadedReplies = true
 	}
+	if opts.Reactions.Enabled {
+		// A group message aggregates many alerts, so there is no single
+		// alert whose state a reaction on it could reflect.
+		if mgr.threadingMode == ThreadingModeGroup {
+			opts.Log.Warn("reactions are ignored in group threading mode", "room", mgr.room)
+		} else {
+			reactions, err := newReactionManager(mgr.ID(), opts, transport, client.CheckRetry)
+			if err != nil {
+				return nil, fmt.Errorf("initialising reactions: %w", err)
+			}
+			mgr.reactions = reactions
+		}
+	}
 	if mgr.threadingMode != ThreadingModeGroup {
 		return mgr, nil
 	}
@@ -333,6 +353,12 @@ func (m *GoogleChatManager) pushGroup(ctx context.Context, payload providers.Web
 // pushAlerts is the legacy per-alert dispatch path.
 func (m *GoogleChatManager) pushAlerts(ctx context.Context, alerts []alertmgrtmpl.Alert) error {
 	m.lo.Info("dispatching alerts to google chat", "count", len(alerts))
+	// Reactions are updated only once every notification in the payload has
+	// been attempted, so they can neither delay nor fail a delivery.
+	var delivered []reactionEvent
+	if m.reactions != nil {
+		defer func() { m.reactions.apply(ctx, delivered) }()
+	}
 	for _, alert := range alerts {
 		now := time.Now()
 		msgs, err := m.prepareMessage(alert)
@@ -345,11 +371,19 @@ func (m *GoogleChatManager) pushAlerts(ctx context.Context, alerts []alertmgrtmp
 			continue
 		}
 		threadKey := threadKeyForAlert(m.room, alert.Fingerprint, alert.StartsAt)
-		for _, msg := range msgs {
-			if err := m.sendMessage(ctx, msg, threadKey, m.threadedReplies); err != nil {
+		var original string
+		for i, msg := range msgs {
+			name, err := m.postMessage(ctx, msg, threadKey, m.threadedReplies)
+			if err != nil {
 				m.metrics.Increment(fmt.Sprintf(`alerts_dispatched_errors_total{provider="%s", room="%s", reason="sending"}`, m.ID(), m.Room()))
 				return err
 			}
+			if i == 0 {
+				original = name
+			}
+		}
+		if m.reactions != nil {
+			delivered = append(delivered, reactionEvent{status: alert.Status, key: threadKey, message: original})
 		}
 		m.metrics.Increment(fmt.Sprintf(`alerts_dispatched_total{provider="%s", room="%s"}`, m.ID(), m.Room()))
 		m.metrics.Duration(fmt.Sprintf(`alerts_dispatched_duration_seconds{provider="%s", room="%s"}`, m.ID(), m.Room()), now)

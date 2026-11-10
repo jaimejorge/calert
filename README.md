@@ -92,7 +92,15 @@ Example:
 |  `providers.<room_name>.threading_mode` 	| `alert` (default) uses deterministic per-alert lifecycle keys. `group` uses one thread per Alertmanager GroupKey. | no | `alert` |
 |  `providers.<room_name>.dedup_window` 	| Group-mode window for sequential identical payloads after successful delivery. | no | `2m` |
 |  `providers.<room_name>.max_alerts_per_message` 	| Maximum alert sections in a group card. | no | `10` |
-|  `providers.<room_name>.redis.*` 	| Optional Redis address, password, db, and key_prefix for shared group state. | no | - |
+|  `providers.<room_name>.redis.*` 	| Optional Redis address, password, db, and key_prefix for shared group state and shared reaction state. | no | - |
+|  `providers.<room_name>.reactions.enabled` 	| Mark the alert state with a reaction on the original message. Needs authenticated Google Chat API access, see [docs/reactions.md](docs/reactions.md). | no | false |
+|  `providers.<room_name>.reactions.firing` 	| Unicode emoji added to the original message while the alert is firing. | no | `🔥` |
+|  `providers.<room_name>.reactions.resolved` 	| Unicode emoji added to the original message when the alert resolves. | no | `✅` |
+|  `providers.<room_name>.reactions.remove_previous` 	| Remove the firing reaction when the alert resolves. | no | true |
+|  `providers.<room_name>.reactions.credentials_file` 	| Path to Google `authorized_user` or `service_account` credentials. Required when reactions are enabled, unless `credentials_json` is set. | no | - |
+|  `providers.<room_name>.reactions.credentials_json` 	| The same credentials inline, for use with environment variables. | no | - |
+|  `providers.<room_name>.reactions.impersonate_user` 	| Workspace user a service account acts as (domain-wide delegation). | no | - |
+|  `providers.<room_name>.reactions.ttl` 	| How long the original message of an alert is remembered. | no | `168h` |
 |  `providers.<room_name>.dry_run` 	| In case you're simply experimenting with `calert` config changes and you don't wish to send _actual_ notifications, you can set true. | no | false |
 |  `providers.<room_name>.retry_max` 	| Maximum number of retries | no | `3` |
 |  `providers.<room_name>.retry_wait_min` 	| Minimum time to wait before retrying | no | `1s` |
@@ -217,6 +225,23 @@ Alertmanager currently doesn't send any _Unique Identifier_ for each Alert. The 
 
 The above is per-alert threading (`threading_mode = "alert"`, the default). `calert` also supports threading one whole Alertmanager **group** into a single thread with an aggregated message, and sharing dedup state across active-active instances via Redis. See [docs/group-threading.md](docs/group-threading.md) for setup.
 
+## Reactions on Resolved Alerts
+
+`calert` can optionally mark the state of an alert with a reaction on its original Google Chat message, so resolved alerts are visible without reading the thread:
+
+- When an alert is `firing`, the notification gets a 🔥 reaction.
+- When the same alert is `resolved`, the 🔥 on the original message is replaced with ✅. The resolved notification is still sent as usual.
+
+```toml
+[providers.prod_alerts.reactions]
+enabled = true
+credentials_file = "/etc/calert/chat-credentials.json"
+```
+
+This is disabled by default and existing webhook-only setups are not affected. Incoming webhooks cannot manage reactions: Google Chat only accepts them from an authenticated **user**, so enabling this needs a Google Cloud project with the Chat API enabled and OAuth credentials with the `https://www.googleapis.com/auth/chat.messages.reactions` scope. A reaction failure never blocks or delays an alert notification.
+
+See [docs/reactions.md](docs/reactions.md) for the Google Cloud setup, all options, limitations and migration steps.
+
 ## Prometheus Metrics
 
 `calert` exposes various metrics in the Prometheus exposition format.
@@ -231,6 +256,9 @@ Here's a list of internal app metrics available at `/metrics`:
 |  `calert_http_request_duration_seconds_{sum,count,bucket}` 	| Duration of HTTP request (_in seconds_).  	| `histogram` |
 |  `calert_alerts_dispatched_total` 	| Number of alerts dispatched to upstream providers, grouped with labels like `provider` and `room`.  	| `counter` |
 |  `calert_alerts_dispatched_duration_seconds_{sum,count,bucket}` 	| Duration to send an alert to upstream provider.	| `histogram` |
+|  `calert_reactions_total` 	| Number of reactions added to or removed from alert messages, grouped with labels like `provider`, `room` and `action`.  	| `counter` |
+|  `calert_reactions_errors_total` 	| Number of failed reaction updates, grouped with labels like `action` and `reason`. Notifications are not affected.  	| `counter` |
+|  `calert_reactions_skipped_total` 	| Number of alerts whose reaction could not be managed, for example a resolved alert without a known original message.  	| `counter` |
 
 It also exposes Go process metrics in addition to app metrics, which you can use to monitor the performance of `calert`.
 

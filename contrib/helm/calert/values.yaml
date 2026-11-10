@@ -57,6 +57,14 @@ providers: {}
   #     password: ""
   #     db: 0
   #     key_prefix: "calert:"
+  #   reactions: # Optional reactions on the original alert message. See docs/reactions.md.
+  #     enabled: true
+  #     firing: "🔥"
+  #     resolved: "✅"
+  #     remove_previous: true
+  #     credentials_file: "/etc/calert/chat-credentials.json" # Or supply credentials_json through `env`/`envFrom`.
+  #     impersonate_user: "alerts-bot@example.com" # Service account credentials only.
+  #     ttl: "168h"
   #   dry_run: false # Enable dry run mode (no actual notifications sent).
   #   retry_max: 3 # Maximum number of retries.
   #   retry_wait_min: "1s" # Minimum wait time between retries.
